@@ -89,6 +89,7 @@ UI elements are manually positioned using `setCursor(x, y)` from the Arduino_GFX
 - Double-tap to wake the display
 - Automatic screen timeout
 - Battery indicator with charging (green + bolt) and low battery (yellow) states
+- Swipe gesture detection (left and right)
 
 ## Development
 

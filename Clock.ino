@@ -42,19 +42,22 @@ void Arduino_IIC_Touch_Interrupt(void) {
 
 // Configurações do relógio
 const char *WEEKDAYS[] = { "Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab" };
-const int BOLT_START[] = {4, 3, 2, 1, 0, 2, 1, 0};
-const int BOLT_LEN[] = {2, 2, 2, 5, 5, 2, 2, 2};
+const int BOLT_START[] = { 4, 3, 2, 1, 0, 2, 1, 0 };
+const int BOLT_LEN[] = { 2, 2, 2, 5, 5, 2, 2, 2 };
 
 // Variáveis do relógio
 unsigned long lastMillis = 0;         // momento da última atualização da tela
 unsigned long lastWarningMillis = 0;  // momento do último aviso
 unsigned long lastTouchMillis = 0;    // momento do último toque -> detecta o duplo
 unsigned long lastScreenRefresh = 0;  // momento que a tela foi acesa
-bool screenOn = true;
-int lastDisplayedDay = 0;  // último dia exibido na tela
+bool screenOn = true;                 // tela está ligada?
+int lastDisplayedDay = 0;             // último dia exibido na tela
 uint16_t statusColor = gfx->color565(0xCD, 0x2C, 0x25);
-int lastPercent = 101;
-bool lastChargingState = false;
+int lastPercent = 101;           // última porcentagem de bateria exibida
+bool lastChargingState = false;  // último estado de carregamento registrado
+bool isTouching = false;         // há um toque ativo na tela?
+int xStart = 0;                  // posição X  inicial do deslize
+int xEnd = 0;                    // posição X final do deslize
 
 void show_date() {
   gfx->setTextColor(gfx->color565(0x60, 0x60, 0x66), BLACK);
@@ -98,19 +101,21 @@ void show_battery(int percent, bool chargingState) {
 
   gfx->fillRect(314, 40, 32, 16, gfx->color565(0x2C, 0x2C, 0x2E));
   gfx->fillRect(346, 44, 4, 8, gfx->color565(0x2C, 0x2C, 0x2E));
-  
-  if  (chargingState) {
-    gfx->fillRect(314, 40, fillWidth, 16, gfx->color565(0x30, 0xD1, 0x58)); //verde
-    for (int line = 0; line < 8 ; line++) {
+
+  if (chargingState) {
+    gfx->fillRect(314, 40, fillWidth, 16, gfx->color565(0x30, 0xD1, 0x58));
+    for (int line = 0; line < 8; line++) {
       gfx->fillRect(324 + BOLT_START[line] * 2, 40 + line * 2, BOLT_LEN[line] * 2, 2, gfx->color565(0xD8, 0xD8, 0xDD));
     }
-  }
-  else if (percent <= 20) {
-    gfx->fillRect(314, 40, fillWidth, 16, gfx->color565(0xFF, 0xD6, 0x0A)); //amarelo
-  }
-  else {
+  } else if (percent <= 20) {
+    gfx->fillRect(314, 40, fillWidth, 16, gfx->color565(0xFF, 0xD6, 0x0A));  //amarelo
+  } else {
     gfx->fillRect(314, 40, fillWidth, 16, gfx->color565(0x8E, 0x8E, 0x93));
   }
+}
+
+int read_touch_x() {
+  return FT3168->IIC_Read_Device_Value(FT3168->Arduino_IIC_Touch::Value_Information::TOUCH_COORDINATE_X);
 }
 
 void setup(void) {
@@ -182,9 +187,11 @@ void setup(void) {
 
 void loop() {
   // Cuida dos toques
-  if (FT3168->IIC_Interrupt_Flag) {             // a bandeirinha do chip está levantada?
-    FT3168->IIC_Interrupt_Flag = false;         // abaixa a bandeirinha do chip
-    if (millis() - lastWarningMillis > 50) {    // é um toque novo
+  if (FT3168->IIC_Interrupt_Flag) {           // a bandeirinha do chip está levantada?
+    FT3168->IIC_Interrupt_Flag = false;       // abaixa a bandeirinha do chip
+    if (millis() - lastWarningMillis > 50) {  // é um toque novo
+      xStart = read_touch_x();
+      isTouching = true;
       if (millis() - lastTouchMillis <= 500) {  // é toque duplo
         lastTouchMillis = 0;
         if (!screenOn) {
@@ -197,6 +204,7 @@ void loop() {
         lastTouchMillis = millis();
       }
     }
+    xEnd = read_touch_x();
     lastWarningMillis = millis();
   }
 
@@ -219,9 +227,22 @@ void loop() {
     int percent = power.getBatteryPercent();
     bool chargingState = power.isCharging();
     if ((percent != lastPercent) || (chargingState != lastChargingState)) {
-      show_battery (percent, chargingState);
+      show_battery(percent, chargingState);
       lastPercent = percent;
-      lastChargingState =  chargingState;
+      lastChargingState = chargingState;
     }
+  }
+
+  // Cuida do deslize
+  if ((isTouching) && ((millis() - lastWarningMillis) > 50)) {
+    int xCourse = xEnd - xStart;
+
+    if (xCourse > 100) {
+      USBSerial.println("Swiped right");
+    } else if (xCourse < -100) {
+      USBSerial.println("Swiped left");
+    }
+    
+    isTouching = false;
   }
 }

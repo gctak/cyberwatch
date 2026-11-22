@@ -68,7 +68,7 @@ For additional installation and hardware configuration instructions, refer to th
 4. Compile and upload the firmware to the ESP32-C6.
 
 > [!WARNING]
-> `secrets.h` must be ignored by Git and should never be committed to the repository.
+> `secrets.h` is ignored by Git and should never be committed to the repository.
 
 ## Display Configuration
 

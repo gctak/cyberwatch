@@ -5,6 +5,12 @@ A DIY smartwatch project powered by the ESP32-C6, featuring a custom AMOLED inte
 > [!NOTE]
 > **Project Status:** 🚧 Work in progress.
 
+## Preview
+
+|             Normal             |                 Charging                  |                   Low battery                   |
+| :----------------------------: | :---------------------------------------: | :---------------------------------------------: |
+| ![Normal](docs/cyberwatch.png) | ![Charging](docs/cyberwatch-charging.png) | ![Low battery](docs/cyberwatch-low-battery.png) |
+
 ## Hardware
 
 This project is being developed for the **Waveshare ESP32-C6-Touch-AMOLED-2.06**.
@@ -82,6 +88,7 @@ UI elements are manually positioned using `setCursor(x, y)` from the Arduino_GFX
 - Custom AMOLED interface
 - Double-tap to wake the display
 - Automatic screen timeout
+- Battery indicator with charging (green + bolt) and low battery (yellow) states
 
 ## Development
 

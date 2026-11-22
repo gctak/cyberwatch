@@ -2,7 +2,8 @@
 
 A DIY smartwatch project powered by the ESP32-C6, featuring a custom AMOLED interface, Wi-Fi connectivity, and real-time clock synchronization.
 
-> **Status:** Work in progress.
+> [!NOTE]
+> **Project Status:** 🚧 Work in progress.
 
 ## Hardware
 
@@ -24,10 +25,34 @@ The project uses the following libraries:
 | Arduino_DriveBus | 1.0.1   |
 | Arduino_GFX      | 1.6.0   |
 | SensorLib        | 0.3.1   |
+| XPowersLib       | 0.3.0   |
 
 These versions correspond to the libraries currently used during development.
 
-For hardware setup, library installation, and configuration instructions, refer to the [official Waveshare documentation](https://docs.waveshare.com/ESP32-C6-Touch-AMOLED-2.06).
+### Library Installation
+
+Install the required libraries in your Arduino sketchbook's `libraries` directory.
+
+**Default Windows location:**
+
+```text
+Documents/
+└── Arduino/
+    └── libraries/
+        ├── Arduino_DriveBus/
+        ├── Arduino_GFX/
+        ├── SensorLib/
+        └── XPowersLib/
+```
+
+> [!IMPORTANT]
+> The libraries directory may vary depending on your operating system and Arduino IDE configuration.
+>
+> You can check your sketchbook location under **File → Preferences → Sketchbook location**. Place the libraries inside its `libraries` subdirectory.
+
+Restart the Arduino IDE after installing the libraries.
+
+For additional installation and hardware configuration instructions, refer to the [official Waveshare documentation](https://docs.waveshare.com/ESP32-C6-Touch-AMOLED-2.06).
 
 ## Setup
 
@@ -37,15 +62,16 @@ For hardware setup, library installation, and configuration instructions, refer 
 4. Compile and upload the firmware to the ESP32-C6.
 
 > [!WARNING]
-> `secrets.h` is ignored by Git and should never be committed to the repository.
+> `secrets.h` must be ignored by Git and should never be committed to the repository.
 
 ## Display Configuration
 
-The interface is specifically designed for the **ESP32-C6-Touch-AMOLED-2.06** display.
+The interface is specifically designed for the **Waveshare ESP32-C6-Touch-AMOLED-2.06** display.
 
 UI elements are manually positioned using `setCursor(x, y)` from the Arduino_GFX library.
 
-**Important:** Cursor coordinates, text sizes, and spacing are tailored to the display's resolution and orientation. Using a different display may require layout adjustments.
+> [!IMPORTANT]
+> Cursor coordinates, text sizes, and spacing are tailored to the display's resolution and orientation. Using a different display may require layout adjustments.
 
 ## Current Features
 

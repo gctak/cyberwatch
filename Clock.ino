@@ -118,6 +118,47 @@ int read_touch_x() {
   return FT3168->IIC_Read_Device_Value(FT3168->Arduino_IIC_Touch::Value_Information::TOUCH_COORDINATE_X);
 }
 
+bool connect_wifi(const char *ssid, const char *password) {
+  int attempts = 0;
+  WiFi.disconnect(true);          // 1º: desiste da tentativa anterior
+  delay(100);
+  WiFi.begin(ssid, password); // 2º: começa a nova, do zero
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    show_time();
+    delay(500);
+    attempts += 1;
+  }
+  return WiFi.status() == WL_CONNECTED;
+}
+
+bool connect_any() {
+  WiFi.setAutoReconnect(false); // "não insista sozinho"
+  bool connected = connect_wifi(HOME_SSID, HOME_PASSWORD) || connect_wifi(HOTSPOT_SSID, HOTSPOT_PASSWORD);
+  if (!connected) {
+    USBSerial.println("Wi-Fi connection failed");
+    USBSerial.printf("Status:%d\n", WiFi.status());
+  } else {
+    USBSerial.printf("(%lu) Connected to: %s\n", millis(), WiFi.SSID().c_str());
+  }
+  return connected;
+}
+
+void sync_time() {
+  configTime(-10800, 0, "pool.ntp.org");  // configura de onde pegar a hora e o fuso
+  struct tm timeinfo;                     // cria uma "caixa" pra guardar a hora
+  int ntp_attempts = 0;
+  while (getLocalTime(&timeinfo, 1000) != true && ntp_attempts < 10) {
+    show_time();
+    delay(500);
+    ntp_attempts += 1;
+  }
+  if (ntp_attempts < 10) {
+    rtc.setDateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+  } else {
+    USBSerial.println("Failed to synchronize time with NTP server");
+  }
+}
+
 void setup(void) {
   USBSerial.begin(115200);
 
@@ -149,32 +190,9 @@ void setup(void) {
 
   show_time();
 
-  // Tenta o Wi-Fi
-  int attempts = 0;
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-    show_time();
-    delay(500);
-    attempts += 1;
-  }
-  if (WiFi.status() == WL_CONNECTED) {
-    USBSerial.println("Wi-Fi connection successful");
-    configTime(-10800, 0, "pool.ntp.org");  // configura de onde pegar a hora e o fuso
-    struct tm timeinfo;                     // cria uma "caixa" pra guardar a hora
-    int ntp_attempts = 0;
-    while (getLocalTime(&timeinfo, 1000) != true && ntp_attempts < 10) {
-      show_time();
-      delay(500);
-      ntp_attempts += 1;
-    }
-    if (ntp_attempts < 10) {
-      rtc.setDateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
-    } else {
-      USBSerial.println("Failed to synchronize time with NTP server");
-    }
-  } else {
-    USBSerial.println("Wi-Fi connection failed");
-    USBSerial.printf("Status:%d\n", WiFi.status());
+  // Sincroniza a hora pela internet
+  if (connect_any()) {
+    sync_time();
   }
 
   WiFi.disconnect(true);
@@ -242,7 +260,7 @@ void loop() {
     } else if (xCourse < -100) {
       USBSerial.println("Swiped left");
     }
-    
+
     isTouching = false;
   }
 }

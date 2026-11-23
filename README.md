@@ -64,11 +64,14 @@ For additional installation and hardware configuration instructions, refer to th
 
 1. Install the required libraries and configure the ESP32-C6 board in Arduino IDE.
 2. Copy `secrets.example.h` to `secrets.h`.
-3. Open `secrets.h` and fill in your Wi-Fi credentials.
+3. Open `secrets.h` and fill in your home Wi-Fi and mobile hotspot credentials.
 4. Compile and upload the firmware to the ESP32-C6.
 
 > [!WARNING]
 > `secrets.h` is ignored by Git and should never be committed to the repository.
+
+> [!TIP]
+> The ESP32-C6 only supports 2.4 GHz Wi-Fi. On iPhone, enable **Maximize Compatibility** in **Settings → Personal Hotspot**.
 
 ## Display Configuration
 
@@ -83,7 +86,7 @@ UI elements are manually positioned using `setCursor(x, y)` from the Arduino_GFX
 
 - Digital clock interface
 - Date and weekday display
-- Wi-Fi connectivity
+- Wi-Fi connectivity with automatic fallback to a mobile hotspot
 - NTP time synchronization
 - Custom AMOLED interface
 - Double-tap to wake the display

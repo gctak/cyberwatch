@@ -8,6 +8,9 @@
 #include <WiFi.h>
 #include "Arduino_DriveBus_Library.h"
 #include "XPowersLib.h"
+#include "ESP_I2S.h"
+#include "esp_check.h"
+#include "es8311.h"
 
 HWCDC USBSerial;
 SensorPCF85063 rtc;
@@ -40,6 +43,16 @@ void Arduino_IIC_Touch_Interrupt(void) {
   }
 }
 
+// Áudio (ES8311 + amplificador)
+#define EXAMPLE_SAMPLE_RATE 16000
+#define EXAMPLE_VOICE_VOLUME 60                  // 0 - 100
+#define EXAMPLE_MIC_GAIN (es8311_mic_gain_t)(3)  // 0 - 7
+#define I2C_NUM 0
+
+I2SClass i2s;
+const char *TAG = "cyberwatch_audio";
+int16_t powerUp[9600];  // som de power-up (0,3 s em estéreo)
+
 // Configurações do relógio
 const char *WEEKDAYS[] = { "Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab" };
 const int BOLT_START[] = { 4, 3, 2, 1, 0, 2, 1, 0 };
@@ -53,11 +66,16 @@ unsigned long lastScreenRefresh = 0;  // momento que a tela foi acesa
 bool screenOn = true;                 // tela está ligada?
 int lastDisplayedDay = 0;             // último dia exibido na tela
 uint16_t statusColor = gfx->color565(0xCD, 0x2C, 0x25);
-int lastPercent = 101;           // última porcentagem de bateria exibida
-bool lastChargingState = false;  // último estado de carregamento registrado
-bool isTouching = false;         // há um toque ativo na tela?
-int xStart = 0;                  // posição X  inicial do deslize
-int xEnd = 0;                    // posição X final do deslize
+int lastPercent = 101;              // última porcentagem de bateria exibida
+bool lastChargingState = false;     // último estado de carregamento registrado para usar na bateria
+bool isTouching = false;            // há um toque ativo na tela?
+int xStart = 0;                     // posição X  inicial do deslize
+int xEnd = 0;                       // posição X final do deslize
+int lastSyncDay = 0;                // último dia que a data e o horário foi sincronizado pelo NTP server
+unsigned long lastSyncCheck = 0;    // momento da última checagem do horário pra sincronização agendada
+bool wasCharging = false;           // estava carregando?
+unsigned long lastChargeCheck = 0;  // momento da última checagem do cabo
+
 
 void show_date() {
   gfx->setTextColor(gfx->color565(0x60, 0x60, 0x66), BLACK);
@@ -120,9 +138,9 @@ int read_touch_x() {
 
 bool connect_wifi(const char *ssid, const char *password) {
   int attempts = 0;
-  WiFi.disconnect(true);          // 1º: desiste da tentativa anterior
+  WiFi.disconnect(true);  // 1º: desiste da tentativa anterior
   delay(100);
-  WiFi.begin(ssid, password); // 2º: começa a nova, do zero
+  WiFi.begin(ssid, password);  // 2º: começa a nova, do zero
   while (WiFi.status() != WL_CONNECTED && attempts < 20) {
     show_time();
     delay(500);
@@ -132,7 +150,7 @@ bool connect_wifi(const char *ssid, const char *password) {
 }
 
 bool connect_any() {
-  WiFi.setAutoReconnect(false); // "não insista sozinho"
+  WiFi.setAutoReconnect(false);  // "não insista sozinho"
   bool connected = connect_wifi(HOME_SSID, HOME_PASSWORD) || connect_wifi(HOTSPOT_SSID, HOTSPOT_PASSWORD);
   if (!connected) {
     USBSerial.println("Wi-Fi connection failed");
@@ -144,6 +162,8 @@ bool connect_any() {
 }
 
 void sync_time() {
+  struct timeval zero = { 0, 0 };         // "1º de janeiro de 1970, 0h"
+  settimeofday(&zero, NULL);              // zera o relógio interno
   configTime(-10800, 0, "pool.ntp.org");  // configura de onde pegar a hora e o fuso
   struct tm timeinfo;                     // cria uma "caixa" pra guardar a hora
   int ntp_attempts = 0;
@@ -154,9 +174,62 @@ void sync_time() {
   }
   if (ntp_attempts < 10) {
     rtc.setDateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+    USBSerial.printf("(%lu) Time syncronized successfuly", millis());
   } else {
     USBSerial.println("Failed to synchronize time with NTP server");
   }
+}
+
+esp_err_t es8311_codec_init(void) {
+  es8311_handle_t es_handle = es8311_create(I2C_NUM, ES8311_ADDRRES_0);
+  ESP_RETURN_ON_FALSE(es_handle, ESP_FAIL, TAG, "es8311 create failed");
+  const es8311_clock_config_t es_clk = {
+    .mclk_inverted = false,
+    .sclk_inverted = false,
+    .mclk_from_mclk_pin = true,
+    .mclk_frequency = EXAMPLE_SAMPLE_RATE * 256,
+    .sample_frequency = EXAMPLE_SAMPLE_RATE
+  };
+
+  ESP_ERROR_CHECK(es8311_init(es_handle, &es_clk, ES8311_RESOLUTION_16, ES8311_RESOLUTION_16));
+  ESP_RETURN_ON_ERROR(es8311_sample_frequency_config(es_handle, es_clk.mclk_frequency, es_clk.sample_frequency), TAG, "set es8311 sample frequency failed");
+  ESP_RETURN_ON_ERROR(es8311_microphone_config(es_handle, false), TAG, "set es8311 microphone failed");
+
+  ESP_RETURN_ON_ERROR(es8311_voice_volume_set(es_handle, EXAMPLE_VOICE_VOLUME, NULL), TAG, "set es8311 volume failed");
+  ESP_RETURN_ON_ERROR(es8311_microphone_gain_set(es_handle, EXAMPLE_MIC_GAIN), TAG, "set es8311 microphone gain failed");
+  return ESP_OK;
+}
+
+void setup_audio() {
+  i2s.setPins(I2S_SCLK, I2S_LRCK, I2S_DSDIN, -1, I2S_MCLK);
+  if (!i2s.begin(I2S_MODE_STD, EXAMPLE_SAMPLE_RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO, I2S_STD_SLOT_BOTH)) {
+    USBSerial.println("Failed to initialize I2S bus!");
+    return;
+  }
+
+  pinMode(PA_CTRL, OUTPUT);
+  digitalWrite(PA_CTRL, LOW);
+
+  if (es8311_codec_init() != ESP_OK) {
+    USBSerial.println("ES8311 init failed!");
+  }
+
+  USBSerial.println("Audio ready");
+
+  float angle = 0;
+  for (int i = 0; i < 4800; i++) {
+    angle += (2 * PI) * (400 + 1200 * (i / 4800.0)) / EXAMPLE_SAMPLE_RATE;
+    int16_t sample = 8000 * sin(angle);
+    powerUp[i * 2] = sample;      // lado esquerdo
+    powerUp[i * 2 + 1] = sample;  // lado direito
+  }
+}
+
+void play_power_up() {
+  digitalWrite(PA_CTRL, HIGH);
+  i2s.write((uint8_t *)powerUp, sizeof(powerUp));
+  delay(50);
+  digitalWrite(PA_CTRL, LOW);
 }
 
 void setup(void) {
@@ -188,6 +261,10 @@ void setup(void) {
     USBSerial.println("AXP2101 unavailable; continuing without battery info.");
   }
 
+  // Liga o áudio
+  setup_audio();
+
+  // Mostra a hora do RTC
   show_time();
 
   // Sincroniza a hora pela internet
@@ -201,6 +278,8 @@ void setup(void) {
   FT3168->IIC_Interrupt_Flag = false;  // abaixa a bandeirinha
 
   lastScreenRefresh = millis();  // inicia o timer da tela
+
+  wasCharging = power.isCharging();
 }
 
 void loop() {
@@ -241,6 +320,7 @@ void loop() {
       show_date();
       lastDisplayedDay = day;
     }
+
     // Atualiza a bateria
     int percent = power.getBatteryPercent();
     bool chargingState = power.isCharging();
@@ -262,5 +342,35 @@ void loop() {
     }
 
     isTouching = false;
+  }
+
+  // Atualiza a data e hora todo dia às 4h
+  if ((millis() - lastSyncCheck) > 60000) {
+    lastSyncCheck = millis();
+    RTC_DateTime datetime = rtc.getDateTime();
+    if ((datetime.getDay() != lastSyncDay) && (datetime.getHour() == 4)) {
+      if (connect_any()) {
+        sync_time();
+      }
+
+      WiFi.disconnect(true);
+      WiFi.mode(WIFI_OFF);
+
+      lastSyncDay = datetime.getDay();
+    }
+  }
+
+  // Detecta se o cabo foi conectado
+  if ((millis() - lastChargeCheck) > 1000) {
+    lastChargeCheck = millis();
+    bool chargingState = power.isCharging();  //agora
+    if (!wasCharging && chargingState) {
+      gfx->displayOn();
+      screenOn = true;
+      show_time();
+      play_power_up();
+      lastScreenRefresh = millis();
+    }
+    wasCharging = chargingState;
   }
 }

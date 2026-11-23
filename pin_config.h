@@ -17,3 +17,10 @@
 #define IIC_SCL 7
 #define TP_INT 15
 #define TP_RESET 10
+
+// AUDIO
+#define I2S_MCLK 19
+#define I2S_SCLK 20
+#define I2S_LRCK 22
+#define I2S_DSDIN 23
+#define PA_CTRL 6

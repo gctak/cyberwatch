@@ -1,3 +1,6 @@
+// CyberWatch - Copyright (C) 2026 Giovanna Cardoso Takingami
+// Licensed under the GNU GPL v3.0. See the LICENSE file for details.
+
 #include <Arduino.h>
 #include "Arduino_GFX_Library.h"
 #include "pin_config.h"

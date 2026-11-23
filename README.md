@@ -108,3 +108,14 @@ The project is currently under active development, with a focus on building a li
 ## Credits
 
 - ES8311 audio codec driver (`es8311.c`, `es8311.h`, `es8311_reg.h`) adapted from the Waveshare ESP32-S3-Touch-AMOLED-2.16 Arduino examples (originally by Espressif), licensed under the [Apache License 2.0](licenses/LICENSE-Apache-2.0.txt).
+- Pin definitions (`pin_config.h`) based on the Waveshare ESP32-C6-Touch-AMOLED-2.06 examples.
+
+## License
+
+Copyright © 2026 Giovanna Cardoso Takingami
+
+This project is licensed under the [GNU General Public License v3.0](LICENSE).
+
+For use in closed-source or commercial projects under different terms, please contact me.
+
+Third-party files keep their original licenses (see [Credits](#credits)).

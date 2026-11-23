@@ -17,6 +17,7 @@ This project is being developed for the **Waveshare ESP32-C6-Touch-AMOLED-2.06**
 
 - **Microcontroller:** ESP32-C6
 - **Display:** 2.06-inch AMOLED touchscreen
+- **Audio:** ES8311 codec with onboard speaker
 - **Development environment:** Arduino IDE
 - **Programming language:** C++
 
@@ -34,6 +35,9 @@ The project uses the following libraries:
 | XPowersLib       | 0.3.0   |
 
 These versions correspond to the libraries currently used during development.
+
+> [!NOTE]
+> Audio playback uses the `ESP_I2S` library, which is included with the ESP32 Arduino core.
 
 ### Library Installation
 
@@ -87,15 +91,20 @@ UI elements are manually positioned using `setCursor(x, y)` from the Arduino_GFX
 - Digital clock interface
 - Date and weekday display
 - Wi-Fi connectivity with automatic fallback to a mobile hotspot
-- NTP time synchronization
+- NTP time synchronization at startup and daily at 4 AM
 - Custom AMOLED interface
 - Double-tap to wake the display
 - Automatic screen timeout
 - Battery indicator with charging (green + bolt) and low battery (yellow) states
 - Swipe gesture detection (left and right)
+- Power-up sound and screen wake when the charger is connected
 
 ## Development
 
 CyberWatch is developed using the Arduino framework and C++.
 
 The project is currently under active development, with a focus on building a lightweight, customizable smartwatch interface.
+
+## Credits
+
+- ES8311 audio codec driver (`es8311.c`, `es8311.h`, `es8311_reg.h`) adapted from the Waveshare ESP32-S3-Touch-AMOLED-2.16 Arduino examples (originally by Espressif), licensed under the [Apache License 2.0](licenses/LICENSE-Apache-2.0.txt).

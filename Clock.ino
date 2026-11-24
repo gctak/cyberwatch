@@ -324,6 +324,16 @@ void setup(void) {
 }
 
 void loop() {
+  // Dorme enquanto a tela está apagada (acorda com toque ou a cada 2s)
+  if (!screenOn) {
+    esp_sleep_enable_timer_wakeup(2000000ULL);                    // acorda depois de 2s
+    gpio_wakeup_enable((gpio_num_t)TP_INT, GPIO_INTR_LOW_LEVEL);  // acorda quando o pino do toque for pra LOW
+    esp_sleep_enable_gpio_wakeup();                               // liga o "despertador por pino"
+    esp_light_sleep_start();                                      // dorme aqui... e continua desta linha ao acordar
+    gpio_wakeup_disable((gpio_num_t)TP_INT);                      // desliga o "despertador por pino"
+    gpio_set_intr_type((gpio_num_t)TP_INT, GPIO_INTR_NEGEDGE);    // volta a avisar só no momento em que vai pra LOW
+  }
+
   // Cuida dos toques
   if (FT3168->IIC_Interrupt_Flag) {           // a bandeirinha do chip está levantada?
     FT3168->IIC_Interrupt_Flag = false;       // abaixa a bandeirinha do chip

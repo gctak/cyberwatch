@@ -98,6 +98,7 @@ UI elements are manually positioned using `setCursor(x, y)` from the Arduino_GFX
 - Automatic screen timeout, reset by any touch or swipe
 - Battery indicator with charging (green + bolt) and low battery (yellow) states
 - Power-up sound and screen wake when the charger is connected
+- Light sleep while the screen is off (wakes on touch or every 2 s)
 
 ## Development
 

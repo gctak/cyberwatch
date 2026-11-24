@@ -60,6 +60,7 @@ int16_t powerUp[9600];  // som de power-up (0,3 s em estéreo)
 const char *WEEKDAYS[] = { "Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab" };
 const int BOLT_START[] = { 4, 3, 2, 1, 0, 2, 1, 0 };
 const int BOLT_LEN[] = { 2, 2, 2, 5, 5, 2, 2, 2 };
+const int PAGE_COUNT = 2;
 
 // Variáveis do relógio
 unsigned long lastMillis = 0;         // momento da última atualização da tela
@@ -68,17 +69,18 @@ unsigned long lastTouchMillis = 0;    // momento do último toque -> detecta o d
 unsigned long lastScreenRefresh = 0;  // momento que a tela foi acesa
 bool screenOn = true;                 // tela está ligada?
 int lastDisplayedDay = 0;             // último dia exibido na tela
-uint16_t statusColor = gfx->color565(0xCD, 0x2C, 0x25);
-int lastPercent = 101;              // última porcentagem de bateria exibida
-bool lastChargingState = false;     // último estado de carregamento registrado para usar na bateria
-bool isTouching = false;            // há um toque ativo na tela?
-int xStart = 0;                     // posição X  inicial do deslize
-int xEnd = 0;                       // posição X final do deslize
-int lastSyncDay = 0;                // último dia que a data e o horário foi sincronizado pelo NTP server
-unsigned long lastSyncCheck = 0;    // momento da última checagem do horário pra sincronização agendada
-bool wasCharging = false;           // estava carregando?
-unsigned long lastChargeCheck = 0;  // momento da última checagem do cabo
-
+uint16_t colorRed = gfx->color565(0xCD, 0x2C, 0x25);
+int lastPercent = 101;                      // última porcentagem de bateria exibida
+bool lastChargingState = false;             // último estado de carregamento registrado para usar na bateria
+bool isTouching = false;                    // há um toque ativo na tela?
+int xStart = 0;                             // posição X  inicial do deslize
+int xEnd = 0;                               // posição X final do deslize
+int lastSyncDay = 0;                        // último dia que a data e o horário foi sincronizado pelo NTP server
+unsigned long lastSyncCheck = 0;            // momento da última checagem do horário pra sincronização agendada
+bool wasCharging = false;                   // estava carregando?
+unsigned long lastChargeCheck = 0;          // momento da última checagem do cabo
+int currentPage = 0;                        // página atualmente exibida na tela
+unsigned long lastBatteryUpdateMillis = 0;  // momento da última atualização da bateria
 
 void show_date() {
   gfx->setTextColor(gfx->color565(0x60, 0x60, 0x66), BLACK);
@@ -110,11 +112,11 @@ void fill_even_circle(int cx, int cy, int r, uint16_t color) {
 }
 
 void show_status_bar() {
-  gfx->setTextColor(statusColor, BLACK);
+  gfx->setTextColor(colorRed, BLACK);
   gfx->setTextSize(2);
   gfx->setCursor(60, 40);
   gfx->print("CYBERWATCH");
-  fill_even_circle(46, 48, 6, statusColor);
+  fill_even_circle(46, 48, 6, colorRed);
 }
 
 void show_battery(int percent, bool chargingState) {
@@ -129,7 +131,7 @@ void show_battery(int percent, bool chargingState) {
       gfx->fillRect(324 + BOLT_START[line] * 2, 40 + line * 2, BOLT_LEN[line] * 2, 2, gfx->color565(0xD8, 0xD8, 0xDD));
     }
   } else if (percent <= 20) {
-    gfx->fillRect(314, 40, fillWidth, 16, gfx->color565(0xFF, 0xD6, 0x0A));  //amarelo
+    gfx->fillRect(314, 40, fillWidth, 16, gfx->color565(0xFF, 0xD6, 0x0A));
   } else {
     gfx->fillRect(314, 40, fillWidth, 16, gfx->color565(0x8E, 0x8E, 0x93));
   }
@@ -235,6 +237,37 @@ void play_power_up() {
   digitalWrite(PA_CTRL, LOW);
 }
 
+void show_page_indicator() {
+  int width = (PAGE_COUNT * 20) + ((PAGE_COUNT - 1) * 10);
+  int start = ((LCD_WIDTH / 2) - (width / 2)) & ~1;
+  for (int i = 0; i < PAGE_COUNT; i++) {
+    int x = start + (i * 30);
+    if (i == currentPage) {
+      gfx->fillRect(x, 480, 20, 4, colorRed);
+    } else {
+      gfx->fillRect(x, 480, 20, 4, gfx->color565(0x8E, 0x8E, 0x93));
+    }
+  }
+}
+
+void show_clock_page() {
+  currentPage = 0;
+  gfx->fillRect(0, 60, LCD_WIDTH, LCD_HEIGHT - 60, BLACK);
+  show_date();
+  show_time();
+  show_page_indicator();
+}
+
+void show_vault_page() {
+  currentPage = 1;
+  gfx->fillRect(0, 60, LCD_WIDTH, LCD_HEIGHT - 60, BLACK);
+  gfx->setTextColor(gfx->color565(0xD8, 0xD8, 0xDD), BLACK);
+  gfx->setTextSize(5);
+  gfx->setCursor(130, 230);
+  gfx->print("VAULT");
+  show_page_indicator();
+}
+
 void setup(void) {
   USBSerial.begin(115200);
 
@@ -267,8 +300,13 @@ void setup(void) {
   // Liga o áudio
   setup_audio();
 
-  // Mostra a hora do RTC
-  show_time();
+  // Mostra a data a hora e a bateria
+  show_clock_page();
+  int percent = power.getBatteryPercent();
+  bool chargingState = power.isCharging();
+  show_battery(percent, chargingState);
+  lastPercent = percent;
+  lastChargingState = chargingState;
 
   // Sincroniza a hora pela internet
   if (connect_any()) {
@@ -296,7 +334,7 @@ void loop() {
         lastTouchMillis = 0;
         if (!screenOn) {
           gfx->displayOn();  // liga a tela
-          show_time();
+          show_clock_page();
           screenOn = true;
         }
         lastScreenRefresh = millis();
@@ -309,13 +347,13 @@ void loop() {
   }
 
   // Apaga a tela depois de 15s
-  if (screenOn && (millis() - lastScreenRefresh > 15000)) {
+  if (screenOn && ((millis() - lastScreenRefresh) > 15000)) {
     gfx->displayOff();
     screenOn = false;
   }
 
   // Atualiza a hora e a data
-  if ((millis() - lastMillis > 1000) && screenOn) {
+  if ((millis() - lastMillis > 1000) && screenOn && currentPage == 0) {
     lastMillis = millis();
     show_time();
     int day = rtc.getDateTime().getDay();
@@ -323,8 +361,11 @@ void loop() {
       show_date();
       lastDisplayedDay = day;
     }
+  }
 
-    // Atualiza a bateria
+  // Atualiza a bateria
+  if ((millis() - lastBatteryUpdateMillis > 1000) && screenOn) {
+    lastBatteryUpdateMillis = millis();
     int percent = power.getBatteryPercent();
     bool chargingState = power.isCharging();
     if ((percent != lastPercent) || (chargingState != lastChargingState)) {
@@ -336,14 +377,14 @@ void loop() {
 
   // Cuida do deslize
   if ((isTouching) && ((millis() - lastWarningMillis) > 50)) {
+    lastScreenRefresh = millis();  // reinicia o temporizador após qualquer toque
     int xCourse = xEnd - xStart;
 
-    if (xCourse > 100) {
-      USBSerial.println("Swiped right");
-    } else if (xCourse < -100) {
-      USBSerial.println("Swiped left");
+    if ((xCourse > 100) && (currentPage == 1) && screenOn) {  // (xCourse > 100) = deslizou pra direita
+      show_clock_page();
+    } else if ((xCourse < -100) && (currentPage == 0) && screenOn) {  //(xCourse < -100) = deslizou pra esquerda
+      show_vault_page();
     }
-
     isTouching = false;
   }
 
@@ -368,9 +409,15 @@ void loop() {
     lastChargeCheck = millis();
     bool chargingState = power.isCharging();  //agora
     if (!wasCharging && chargingState) {
-      gfx->displayOn();
-      screenOn = true;
-      show_time();
+      if (!screenOn) {
+        gfx->displayOn();
+        screenOn = true;
+        if (currentPage == 0) {
+          show_clock_page();
+        } else if (currentPage == 1) {
+          show_vault_page();
+        }
+      }
       play_power_up();
       lastScreenRefresh = millis();
     }

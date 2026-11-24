@@ -92,11 +92,11 @@ UI elements are manually positioned using `setCursor(x, y)` from the Arduino_GFX
 - Date and weekday display
 - Wi-Fi connectivity with automatic fallback to a mobile hotspot
 - NTP time synchronization at startup and daily at 4 AM
-- Custom AMOLED interface
-- Double-tap to wake the display
-- Automatic screen timeout
+- Custom AMOLED interface with a persistent header (status + battery)
+- Multi-page navigation with swipe gestures (clock and Vault pages)
+- Double-tap to wake the display (always returns to the clock page)
+- Automatic screen timeout, reset by any touch or swipe
 - Battery indicator with charging (green + bolt) and low battery (yellow) states
-- Swipe gesture detection (left and right)
 - Power-up sound and screen wake when the charger is connected
 
 ## Development

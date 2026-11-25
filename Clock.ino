@@ -72,13 +72,15 @@ const int PAGE_COUNT = 1;
 #endif
 
 // Variáveis do relógio
-unsigned long lastMillis = 0;         // momento da última atualização da tela
-unsigned long lastWarningMillis = 0;  // momento do último aviso
-unsigned long lastTouchMillis = 0;    // momento do último toque -> detecta o duplo
-unsigned long lastScreenRefresh = 0;  // momento que a tela foi acesa
-bool screenOn = true;                 // tela está ligada?
-int lastDisplayedDay = 0;             // último dia exibido na tela
+uint16_t colorGreen = gfx->color565(0x30, 0xD1, 0x58);
+uint16_t colorYellow = gfx->color565(0xFF, 0xD6, 0x0A);
 uint16_t colorRed = gfx->color565(0xCD, 0x2C, 0x25);
+unsigned long lastMillis = 0;               // momento da última atualização da tela
+unsigned long lastWarningMillis = 0;        // momento do último aviso
+unsigned long lastTouchMillis = 0;          // momento do último toque -> detecta o duplo
+unsigned long lastScreenRefresh = 0;        // momento que a tela foi acesa
+bool screenOn = true;                       // tela está ligada?
+int lastDisplayedDay = 0;                   // último dia exibido na tela
 int lastPercent = 101;                      // última porcentagem de bateria exibida
 bool lastChargingState = false;             // último estado de carregamento registrado para usar na bateria
 bool isTouching = false;                    // há um toque ativo na tela?
@@ -90,6 +92,7 @@ bool wasCharging = false;                   // estava carregando?
 unsigned long lastChargeCheck = 0;          // momento da última checagem do cabo
 int currentPage = 0;                        // página atualmente exibida na tela
 unsigned long lastBatteryUpdateMillis = 0;  // momento da última atualização da bateria
+
 
 void show_date() {
   gfx->setTextColor(gfx->color565(0x60, 0x60, 0x66), BLACK);
@@ -135,12 +138,12 @@ void show_battery(int percent, bool chargingState) {
   gfx->fillRect(346, 44, 4, 8, gfx->color565(0x2C, 0x2C, 0x2E));
 
   if (chargingState) {
-    gfx->fillRect(314, 40, fillWidth, 16, gfx->color565(0x30, 0xD1, 0x58));
+    gfx->fillRect(314, 40, fillWidth, 16, colorGreen);
     for (int line = 0; line < 8; line++) {
       gfx->fillRect(324 + BOLT_START[line] * 2, 40 + line * 2, BOLT_LEN[line] * 2, 2, gfx->color565(0xD8, 0xD8, 0xDD));
     }
   } else if (percent <= 20) {
-    gfx->fillRect(314, 40, fillWidth, 16, gfx->color565(0xFF, 0xD6, 0x0A));
+    gfx->fillRect(314, 40, fillWidth, 16, colorYellow);
   } else {
     gfx->fillRect(314, 40, fillWidth, 16, gfx->color565(0x8E, 0x8E, 0x93));
   }
@@ -302,25 +305,46 @@ const char *check_server() {
   return status;
 }
 
+void draw_server_unit(int y, uint16_t ledColor) {
+  int x = ((LCD_WIDTH - 160) / 2) & ~1;
+  gfx->fillRect(x, y, 160, 52, gfx->color565(0xD8, 0xD8, 0xDD));
+  gfx->fillRect(x + 4, y + 4, 152, 44, BLACK);
+  fill_even_circle(x + 24, y + 26, 6, ledColor);
+  gfx->fillRect(x + 44, y + 24, 96, 4, gfx->color565(0xD8, 0xD8, 0xDD));
+}
+
 void show_server_page() {
   currentPage = 1;
-  gfx->fillRect(0, 60, LCD_WIDTH, LCD_HEIGHT - 60, BLACK);
+  int top = 158;
+  gfx->fillRect(0, 60, LCD_WIDTH, LCD_HEIGHT - 60, BLACK);  //limpa
+  uint16_t ledColor = gfx->color565(0x60, 0x60, 0x66);
+  draw_server_unit(top, ledColor);
+  draw_server_unit(top + 68, ledColor);
   gfx->setTextColor(gfx->color565(0xD8, 0xD8, 0xDD), BLACK);
   gfx->setTextSize(5);
   int nameWidth = strlen(SERVER_NAME) * 30;
   int nameX = ((LCD_WIDTH - nameWidth) / 2) & ~1;
-  gfx->setCursor(nameX, 230);
+  gfx->setCursor(nameX, top + 146);
   gfx->print(SERVER_NAME);
   gfx->setTextColor(gfx->color565(0x60, 0x60, 0x66), BLACK);
   gfx->setTextSize(2);
-  gfx->setCursor(90, 290);
+  gfx->setCursor(90, top + 206);
   gfx->print("STATUS: CHECKING...");
   show_page_indicator();
   const char *status = check_server();
-  int width = (8 + strlen(status)) * 12;   // 8 do "STATUS: " + o resultado
-  int x = ((LCD_WIDTH - width) / 2) & ~1;  // centraliza e deixa par
-  gfx->fillRect(90, 290, 228, 16, BLACK);  // apaga a linha inteira
-  gfx->setCursor(x, 290);
+  if (strcmp(status, "ONLINE") == 0) {  // as letras são iguais?
+    ledColor = colorGreen;
+  } else if (strcmp(status, "OFFLINE") == 0) {
+    ledColor = colorRed;
+  } else if (strcmp(status, "UNKNOWN") == 0) {
+    ledColor = colorYellow;
+  }
+  draw_server_unit(top, ledColor);
+  draw_server_unit(top + 68, ledColor);
+  int width = (8 + strlen(status)) * 12;         // 8 do "STATUS: " + o resultado
+  int x = ((LCD_WIDTH - width) / 2) & ~1;        // centraliza e deixa par
+  gfx->fillRect(90, top + 206, 228, 16, BLACK);  // apaga a linha inteira
+  gfx->setCursor(x, top + 206);
   gfx->printf("STATUS: %s", status);
   lastScreenRefresh = millis();
 }
@@ -450,12 +474,12 @@ void loop() {
 
     if ((xCourse > 100) && (currentPage == 1) && screenOn) {  // (xCourse > 100) = deslizou pra direita
       show_clock_page();
-    } 
-    #if SERVER_MONITOR_ENABLED
+    }
+#if SERVER_MONITOR_ENABLED
     else if ((xCourse < -100) && (currentPage + 1 < PAGE_COUNT) && screenOn) {  //(xCourse < -100) = deslizou pra esquerda
       show_server_page();
     }
-    #endif
+#endif
     isTouching = false;
   }
 
@@ -485,12 +509,12 @@ void loop() {
         screenOn = true;
         if (currentPage == 0) {
           show_clock_page();
-        } 
-        #if SERVER_MONITOR_ENABLED
+        }
+#if SERVER_MONITOR_ENABLED
         else if (currentPage == 1) {
           show_server_page();
         }
-        #endif
+#endif
       }
       play_power_up();
       lastScreenRefresh = millis();

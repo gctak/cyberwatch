@@ -11,6 +11,10 @@ A DIY smartwatch project powered by the ESP32-C6, featuring a custom AMOLED inte
 | :----------------------------: | :---------------------------------------: | :---------------------------------------------: |
 | ![Normal](docs/cyberwatch.png) | ![Charging](docs/cyberwatch-charging.png) | ![Low battery](docs/cyberwatch-low-battery.png) |
 
+|                 Server: checking                 |                Server: online                |                Server: offline                 |
+| :----------------------------------------------: | :------------------------------------------: | :--------------------------------------------: |
+| ![Checking](docs/cyberwatch-server-checking.png) | ![Online](docs/cyberwatch-server-online.png) | ![Offline](docs/cyberwatch-server-offline.png) |
+
 ## Hardware
 
 This project is being developed for the **Waveshare ESP32-C6-Touch-AMOLED-2.06**.
@@ -85,12 +89,12 @@ An optional second page that checks whether a web server is online. Swipe left f
 
 Each time the page is opened, CyberWatch connects to Wi-Fi, sends an HTTPS request to the configured URL and shows the result:
 
-| Status       | Meaning                                                      |
-| ------------ | ------------------------------------------------------------ |
-| `ONLINE`     | The server responded with `200 OK`                           |
-| `OFFLINE`    | The server is down (`502`, `503`, `504` or Cloudflare `530`) |
-| `UNKNOWN`    | Unexpected response or no reply from the server              |
-| `NO NETWORK` | CyberWatch could not connect to any Wi-Fi network            |
+| Status       | LED       | Meaning                                                      |
+| ------------ | --------- | ------------------------------------------------------------ |
+| `ONLINE`     | 🟢 Green  | The server responded with `200 OK`                           |
+| `OFFLINE`    | 🔴 Red    | The server is down (`502`, `503`, `504` or Cloudflare `530`) |
+| `UNKNOWN`    | 🟡 Yellow | Unexpected response or no reply from the server              |
+| `NO NETWORK` | ⚪ Gray   | CyberWatch could not connect to any Wi-Fi network            |
 
 ### Configuration
 

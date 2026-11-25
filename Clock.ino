@@ -14,6 +14,11 @@
 #include "ESP_I2S.h"
 #include "esp_check.h"
 #include "es8311.h"
+#include "config.h"
+#if SERVER_MONITOR_ENABLED
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#endif
 
 HWCDC USBSerial;
 SensorPCF85063 rtc;
@@ -60,7 +65,11 @@ int16_t powerUp[9600];  // som de power-up (0,3 s em estéreo)
 const char *WEEKDAYS[] = { "Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab" };
 const int BOLT_START[] = { 4, 3, 2, 1, 0, 2, 1, 0 };
 const int BOLT_LEN[] = { 2, 2, 2, 5, 5, 2, 2, 2 };
+#if SERVER_MONITOR_ENABLED
 const int PAGE_COUNT = 2;
+#else
+const int PAGE_COUNT = 1;
+#endif
 
 // Variáveis do relógio
 unsigned long lastMillis = 0;         // momento da última atualização da tela
@@ -147,7 +156,11 @@ bool connect_wifi(const char *ssid, const char *password) {
   delay(100);
   WiFi.begin(ssid, password);  // 2º: começa a nova, do zero
   while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-    show_time();
+
+    if (currentPage == 0) {
+      show_time();
+    }
+
     delay(500);
     attempts += 1;
   }
@@ -238,14 +251,16 @@ void play_power_up() {
 }
 
 void show_page_indicator() {
-  int width = (PAGE_COUNT * 20) + ((PAGE_COUNT - 1) * 10);
-  int start = ((LCD_WIDTH / 2) - (width / 2)) & ~1;
-  for (int i = 0; i < PAGE_COUNT; i++) {
-    int x = start + (i * 30);
-    if (i == currentPage) {
-      gfx->fillRect(x, 480, 20, 4, colorRed);
-    } else {
-      gfx->fillRect(x, 480, 20, 4, gfx->color565(0x8E, 0x8E, 0x93));
+  if (PAGE_COUNT > 1) {
+    int width = (PAGE_COUNT * 20) + ((PAGE_COUNT - 1) * 10);
+    int start = ((LCD_WIDTH / 2) - (width / 2)) & ~1;
+    for (int i = 0; i < PAGE_COUNT; i++) {
+      int x = start + (i * 30);
+      if (i == currentPage) {
+        gfx->fillRect(x, 480, 20, 4, colorRed);
+      } else {
+        gfx->fillRect(x, 480, 20, 4, gfx->color565(0x8E, 0x8E, 0x93));
+      }
     }
   }
 }
@@ -258,15 +273,58 @@ void show_clock_page() {
   show_page_indicator();
 }
 
-void show_vault_page() {
+#if SERVER_MONITOR_ENABLED
+const char *check_server() {
+  bool connection = connect_any();
+  const char *status = "";
+  if (connection) {
+    WiFiClientSecure client;
+    client.setInsecure();  // não confere o certificado do site
+    HTTPClient http;
+    http.begin(client, SERVER_URL);  // prepara a consulta
+    http.setTimeout(5000);           // espera no máximo 5 s pela resposta
+    int code = http.GET();           // faz a consulta e devolve o código (ou negativo se falhar)
+    http.end();
+    if (code == 200) {
+      status = "ONLINE";
+    } else if ((code == 530) || (code == 502) || (code == 503) || (code == 504)) {
+      status = "OFFLINE";
+    } else {
+      status = "UNKNOWN";
+    }
+  } else {
+    status = "NO NETWORK";
+  }
+
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+
+  return status;
+}
+
+void show_server_page() {
   currentPage = 1;
   gfx->fillRect(0, 60, LCD_WIDTH, LCD_HEIGHT - 60, BLACK);
   gfx->setTextColor(gfx->color565(0xD8, 0xD8, 0xDD), BLACK);
   gfx->setTextSize(5);
-  gfx->setCursor(130, 230);
-  gfx->print("VAULT");
+  int nameWidth = strlen(SERVER_NAME) * 30;
+  int nameX = ((LCD_WIDTH - nameWidth) / 2) & ~1;
+  gfx->setCursor(nameX, 230);
+  gfx->print(SERVER_NAME);
+  gfx->setTextColor(gfx->color565(0x60, 0x60, 0x66), BLACK);
+  gfx->setTextSize(2);
+  gfx->setCursor(90, 290);
+  gfx->print("STATUS: CHECKING...");
   show_page_indicator();
+  const char *status = check_server();
+  int width = (8 + strlen(status)) * 12;   // 8 do "STATUS: " + o resultado
+  int x = ((LCD_WIDTH - width) / 2) & ~1;  // centraliza e deixa par
+  gfx->fillRect(90, 290, 228, 16, BLACK);  // apaga a linha inteira
+  gfx->setCursor(x, 290);
+  gfx->printf("STATUS: %s", status);
+  lastScreenRefresh = millis();
 }
+#endif
 
 void setup(void) {
   USBSerial.begin(115200);
@@ -392,9 +450,12 @@ void loop() {
 
     if ((xCourse > 100) && (currentPage == 1) && screenOn) {  // (xCourse > 100) = deslizou pra direita
       show_clock_page();
-    } else if ((xCourse < -100) && (currentPage == 0) && screenOn) {  //(xCourse < -100) = deslizou pra esquerda
-      show_vault_page();
+    } 
+    #if SERVER_MONITOR_ENABLED
+    else if ((xCourse < -100) && (currentPage + 1 < PAGE_COUNT) && screenOn) {  //(xCourse < -100) = deslizou pra esquerda
+      show_server_page();
     }
+    #endif
     isTouching = false;
   }
 
@@ -424,9 +485,12 @@ void loop() {
         screenOn = true;
         if (currentPage == 0) {
           show_clock_page();
-        } else if (currentPage == 1) {
-          show_vault_page();
+        } 
+        #if SERVER_MONITOR_ENABLED
+        else if (currentPage == 1) {
+          show_server_page();
         }
+        #endif
       }
       play_power_up();
       lastScreenRefresh = millis();

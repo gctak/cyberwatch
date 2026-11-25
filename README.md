@@ -37,7 +37,7 @@ The project uses the following libraries:
 These versions correspond to the libraries currently used during development.
 
 > [!NOTE]
-> Audio playback uses the `ESP_I2S` library, which is included with the ESP32 Arduino core.
+> Audio playback uses the `ESP_I2S` library, and the server monitor uses `HTTPClient` and `WiFiClientSecure`. All of them are included with the ESP32 Arduino core.
 
 ### Library Installation
 
@@ -69,13 +69,44 @@ For additional installation and hardware configuration instructions, refer to th
 1. Install the required libraries and configure the ESP32-C6 board in Arduino IDE.
 2. Copy `secrets.example.h` to `secrets.h`.
 3. Open `secrets.h` and fill in your home Wi-Fi and mobile hotspot credentials.
-4. Compile and upload the firmware to the ESP32-C6.
+4. Copy `config.example.h` to `config.h` (required, even if you don't use the server monitor).
+5. _(Optional)_ Configure the server monitor in `config.h` (see [Server Monitor](#server-monitor-optional)).
+6. Compile and upload the firmware to the ESP32-C6.
 
 > [!WARNING]
-> `secrets.h` is ignored by Git and should never be committed to the repository.
+> `secrets.h` and `config.h` are ignored by Git and should never be committed to the repository.
 
 > [!TIP]
 > The ESP32-C6 only supports 2.4 GHz Wi-Fi. On iPhone, enable **Maximize Compatibility** in **Settings → Personal Hotspot**.
+
+## Server Monitor (optional)
+
+An optional second page that checks whether a web server is online. Swipe left from the clock page to open it.
+
+Each time the page is opened, CyberWatch connects to Wi-Fi, sends an HTTPS request to the configured URL and shows the result:
+
+| Status       | Meaning                                                      |
+| ------------ | ------------------------------------------------------------ |
+| `ONLINE`     | The server responded with `200 OK`                           |
+| `OFFLINE`    | The server is down (`502`, `503`, `504` or Cloudflare `530`) |
+| `UNKNOWN`    | Unexpected response or no reply from the server              |
+| `NO NETWORK` | CyberWatch could not connect to any Wi-Fi network            |
+
+### Configuration
+
+In `config.h`:
+
+```cpp
+#define SERVER_MONITOR_ENABLED true
+
+const char* SERVER_NAME = "MY SERVER";
+const char* SERVER_URL  = "https://your-server.com";
+```
+
+When disabled (`false`, the default), the page, the page indicator and the HTTPS code are removed from the firmware, saving flash memory.
+
+> [!NOTE]
+> The request does not verify the server's TLS certificate. This is fine for a simple status check, but don't use it to send sensitive data.
 
 ## Display Configuration
 
@@ -93,7 +124,8 @@ UI elements are manually positioned using `setCursor(x, y)` from the Arduino_GFX
 - Wi-Fi connectivity with automatic fallback to a mobile hotspot
 - NTP time synchronization at startup and daily at 4 AM
 - Custom AMOLED interface with a persistent header (status + battery)
-- Multi-page navigation with swipe gestures (clock and Vault pages)
+- Multi-page navigation with swipe gestures and a page indicator
+- Optional server monitor page (ONLINE / OFFLINE / UNKNOWN / NO NETWORK)
 - Double-tap to wake the display (always returns to the clock page)
 - Automatic screen timeout, reset by any touch or swipe
 - Battery indicator with charging (green + bolt) and low battery (yellow) states

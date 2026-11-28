@@ -3,7 +3,7 @@
 #pragma once
 
 // true = ativa a página do monitor | false = só o relógio
-#define SERVER_MONITOR_ENABLED true
+#define SERVER_MONITOR_ENABLED false
 
 // Nome exibido na tela e endereço que será consultado
 const char* SERVER_NAME = "nome_do_servidor";

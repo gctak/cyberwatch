@@ -85,7 +85,7 @@ For additional installation and hardware configuration instructions, refer to th
 
 ## Server Monitor (optional)
 
-An optional second page that checks whether a web server is online. Swipe left from the clock page to open it.
+An optional second page that checks whether a web server is online. Swipe right from the clock page to open it.
 
 Each time the page is opened, CyberWatch connects to Wi-Fi, sends an HTTPS request to the configured URL and shows the result:
 
@@ -107,7 +107,7 @@ const char* SERVER_NAME = "MY SERVER";
 const char* SERVER_URL  = "https://your-server.com";
 ```
 
-When disabled (`false`, the default), the page, the page indicator and the HTTPS code are removed from the firmware, saving flash memory.
+When disabled (`false`, the default), the page, its navigation arrow and the HTTPS code are removed from the firmware, saving flash memory.
 
 > [!NOTE]
 > The request does not verify the server's TLS certificate. This is fine for a simple status check, but don't use it to send sensitive data.
@@ -118,23 +118,28 @@ The interface is specifically designed for the **Waveshare ESP32-C6-Touch-AMOLED
 
 UI elements are manually positioned using `setCursor(x, y)` from the Arduino_GFX library.
 
+> [!NOTE]
+> The CO5300 display controller ignores drawing operations with odd coordinates or 1-pixel sizes.
+> All UI elements use even positions and sizes, and custom helpers (`draw_even_line`, `draw_even_arc`, `fill_even_circle`) draw with 2×2 pixel blocks.
+
 > [!IMPORTANT]
 > Cursor coordinates, text sizes, and spacing are tailored to the display's resolution and orientation. Using a different display may require layout adjustments.
 
 ## Current Features
 
-- Digital clock interface
+- Digital clock interface with large stacked hours and minutes
 - Date and weekday display
 - Wi-Fi connectivity with automatic fallback to a mobile hotspot
 - NTP time synchronization at startup and daily at 4 AM
-- Custom AMOLED interface with a persistent header (status + battery)
-- Multi-page navigation with swipe gestures and a page indicator
+- Custom AMOLED interface with a persistent header (Bluetooth, Wi-Fi and battery icons)
+- Multi-page navigation with swipe gestures and navigation arrows
 - Optional server monitor page (ONLINE / OFFLINE / UNKNOWN / NO NETWORK)
 - Double-tap to wake the display (always returns to the clock page)
 - Automatic screen timeout, reset by any touch or swipe
 - Battery indicator with charging (green + bolt) and low battery (yellow) states
 - Power-up sound and screen wake when the charger is connected
 - Light sleep while the screen is off (wakes on touch or every 2 s)
+- Wi-Fi icon shown only while connected
 
 ## Development
 

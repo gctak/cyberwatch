@@ -62,7 +62,7 @@ const char *TAG = "cyberwatch_audio";
 int16_t powerUp[9600];  // som de power-up (0,3 s em estéreo)
 
 // Configurações do relógio
-const char *WEEKDAYS[] = { "Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab" };
+const char *WEEKDAYS[] = { "DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB" };
 const int BOLT_START[] = { 4, 3, 2, 1, 0, 2, 1, 0 };
 const int BOLT_LEN[] = { 2, 2, 2, 5, 5, 2, 2, 2 };
 #if SERVER_MONITOR_ENABLED
@@ -75,6 +75,8 @@ const int PAGE_COUNT = 1;
 uint16_t colorGreen = gfx->color565(0x30, 0xD1, 0x58);
 uint16_t colorYellow = gfx->color565(0xFF, 0xD6, 0x0A);
 uint16_t colorRed = gfx->color565(0xCD, 0x2C, 0x25);
+uint16_t colorGrey = gfx->color565(0x60, 0x60, 0x66);
+uint16_t colorWhite = gfx->color565(0xD8, 0xD8, 0xDD);
 unsigned long lastMillis = 0;               // momento da última atualização da tela
 unsigned long lastWarningMillis = 0;        // momento do último aviso
 unsigned long lastTouchMillis = 0;          // momento do último toque -> detecta o duplo
@@ -92,28 +94,40 @@ bool wasCharging = false;                   // estava carregando?
 unsigned long lastChargeCheck = 0;          // momento da última checagem do cabo
 int currentPage = 0;                        // página atualmente exibida na tela
 unsigned long lastBatteryUpdateMillis = 0;  // momento da última atualização da bateria
-
+int lastDisplayedMinute = 60;               // último minuto exibido na tela
 
 void show_date() {
-  gfx->setTextColor(gfx->color565(0x60, 0x60, 0x66), BLACK);
-  gfx->setTextSize(3);
-  gfx->setCursor(79, 187);
+  const int size = 3;                      // tamanho da fonte da data
+  const int chars = 9;                     // "SEX 27/11" tem 9 caracteres
+  int width = (chars * 6 - 1) * size;      // largura visível
+  int x = ((LCD_WIDTH - width) / 2) & ~1;  // centralizado, par
+  int y = 134;                             // y da data = começo das horas − altura da data − espaço
 
-  RTC_DateTime datetime = rtc.getDateTime();  // pega a data
-  gfx->printf("%s %02d/%02d/%d", WEEKDAYS[datetime.getWeek()], datetime.getDay(), datetime.getMonth(), datetime.getYear());
+  RTC_DateTime datetime = rtc.getDateTime();
+
+  gfx->setTextColor(colorRed, BLACK);
+  gfx->setTextSize(size);
+  gfx->setCursor(x, y);
+  gfx->printf("%s %02d/%02d", WEEKDAYS[datetime.getWeek()], datetime.getDay(), datetime.getMonth());
 }
 
 void show_time() {
-  gfx->setTextColor(gfx->color565(0xD8, 0xD8, 0xDD), BLACK);
-  gfx->setTextSize(8);
-  gfx->setCursor(61, 251);
+  const int size = 14;
+  int width = 11 * size;                    // 5 + 1 + 5 pontos, cada um com "size" pixels
+  int lineHeight = 7 * size;                // 7 pontos de altura
+  int hoursY = 180;                         // onde as horas começam
+  int x = ((LCD_WIDTH - width) / 2) & ~1;   // metade do que sobra, arredondado pra par
+  int minutesY = hoursY + lineHeight + 20;  // começo das horas + altura delas + espaço
 
-  RTC_DateTime datetime = rtc.getDateTime();  //pega as horas
-  gfx->printf("%02d:%02d", datetime.getHour(), datetime.getMinute());
+  RTC_DateTime datetime = rtc.getDateTime();
 
-  gfx->setTextSize(4);
-  gfx->setCursor(301, 283);
-  gfx->printf("%02d", datetime.getSecond());
+  gfx->setTextColor(colorWhite, BLACK);
+  gfx->setTextSize(size);
+  gfx->setCursor(x, hoursY);
+  gfx->printf("%02d", datetime.getHour());
+
+  gfx->setCursor(x, minutesY);
+  gfx->printf("%02d", datetime.getMinute());
 }
 
 void fill_even_circle(int cx, int cy, int r, uint16_t color) {
@@ -123,12 +137,93 @@ void fill_even_circle(int cx, int cy, int r, uint16_t color) {
   }
 }
 
+void draw_even_line(int x1, int y1, int x2, int y2, uint16_t color) {
+  int dx = x2 - x1;                   // quanto anda na horizontal
+  int dy = y2 - y1;                   // quanto anda na vertical
+  int steps = max(abs(dx), abs(dy));  // quantos passos: o maior dos dois
+
+  if (steps == 0) {
+    gfx->fillRect(x1 & ~1, y1 & ~1, 2, 2, color);
+    return;
+  }
+
+  for (int i = 0; i <= steps; i++) {
+    int x = x1 + dx * i / steps;
+    int y = y1 + dy * i / steps;
+    gfx->fillRect(x & ~1, y & ~1, 2, 2, color);
+  }
+}
+
+void draw_bluetooth_icon(int x, int y, uint16_t color) {
+  draw_even_line(x + 6, y + 0, x + 6, y + 20, color);    // 1: reta do meio
+  draw_even_line(x + 6, y + 0, x + 12, y + 5, color);    // 2: topo → ponta de cima
+  draw_even_line(x + 12, y + 5, x + 0, y + 15, color);   // 3: ponta → perna
+  draw_even_line(x + 6, y + 20, x + 12, y + 15, color);  // 4: base → ponta
+  draw_even_line(x + 12, y + 15, x + 0, y + 5, color);   // 5: ponta → perna
+}
+
+void draw_even_arc(int cx, int cy, int r, uint16_t color) {
+  int limit = r * 7 / 10;
+  for (int d = -limit; d <= limit; d += 2) {
+    int h = sqrt((r * r) - (d * d));
+    gfx->fillRect((cx + d) & ~1, (cy - h) & ~1, 2, 2, color);
+  }
+}
+
+void draw_wifi_icon(int cx, int cy, uint16_t color) {
+  draw_even_arc(cx, cy, 20, color);
+  draw_even_arc(cx, cy, 14, color);
+  draw_even_arc(cx, cy, 8, color);
+  gfx->fillRect(cx - 2, cy - 2, 4, 4, color);
+}
+
+void draw_arrow_up(int x, int y, uint16_t color) {
+  draw_even_line(x + 0, y + 6, x + 6, y + 0, color);
+  draw_even_line(x + 6, y + 0, x + 12, y + 6, color);
+}
+
+void draw_arrow_down(int x, int y, uint16_t color) {
+  draw_even_line(x + 0, y + 0, x + 6, y + 6, color);
+  draw_even_line(x + 6, y + 6, x + 12, y + 0, color);
+}
+
+void draw_arrow_left(int x, int y, uint16_t color) {
+  draw_even_line(x + 6, y + 0, x + 0, y + 6, color);
+  draw_even_line(x + 0, y + 6, x + 6, y + 12, color);
+}
+
+void draw_arrow_right(int x, int y, uint16_t color) {
+  draw_even_line(x + 0, y + 0, x + 6, y + 6, color);
+  draw_even_line(x + 6, y + 6, x + 0, y + 12, color);
+}
+
+void show_navigation_arrows() {
+  draw_arrow_up(198, 70, colorGrey);
+  draw_arrow_down(198, 466, colorGrey);
+#if SERVER_MONITOR_ENABLED
+    draw_arrow_left(30, 282, colorGrey);
+#endif
+  draw_arrow_right(374, 282, colorGrey);
+}
+
+void update_wifi_icon() {
+  gfx->fillRect(84, 38, 30, 22, BLACK);  // apaga a área do Wi-Fi
+  if (WiFi.status() != WL_CONNECTED) {   // se o wifi não estiver sendo executado
+    return;
+  }
+  draw_wifi_icon(98, 58, colorGrey);
+}
+
+void disconnect_wifi() {
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  update_wifi_icon();
+}
+
 void show_status_bar() {
-  gfx->setTextColor(colorRed, BLACK);
-  gfx->setTextSize(2);
-  gfx->setCursor(60, 40);
-  gfx->print("CYBERWATCH");
-  fill_even_circle(46, 48, 6, colorRed);
+  gfx->fillRect(60, 38, 14, 22, BLACK);  // apaga a área do bluetooth
+  draw_bluetooth_icon(60, 38, colorRed);
+  update_wifi_icon();
 }
 
 void show_battery(int percent, bool chargingState) {
@@ -140,7 +235,7 @@ void show_battery(int percent, bool chargingState) {
   if (chargingState) {
     gfx->fillRect(314, 40, fillWidth, 16, colorGreen);
     for (int line = 0; line < 8; line++) {
-      gfx->fillRect(324 + BOLT_START[line] * 2, 40 + line * 2, BOLT_LEN[line] * 2, 2, gfx->color565(0xD8, 0xD8, 0xDD));
+      gfx->fillRect(324 + BOLT_START[line] * 2, 40 + line * 2, BOLT_LEN[line] * 2, 2, colorWhite);
     }
   } else if (percent <= 20) {
     gfx->fillRect(314, 40, fillWidth, 16, colorYellow);
@@ -179,6 +274,9 @@ bool connect_any() {
   } else {
     USBSerial.printf("(%lu) Connected to: %s\n", millis(), WiFi.SSID().c_str());
   }
+
+  update_wifi_icon();
+
   return connected;
 }
 
@@ -253,27 +351,12 @@ void play_power_up() {
   digitalWrite(PA_CTRL, LOW);
 }
 
-void show_page_indicator() {
-  if (PAGE_COUNT > 1) {
-    int width = (PAGE_COUNT * 20) + ((PAGE_COUNT - 1) * 10);
-    int start = ((LCD_WIDTH / 2) - (width / 2)) & ~1;
-    for (int i = 0; i < PAGE_COUNT; i++) {
-      int x = start + (i * 30);
-      if (i == currentPage) {
-        gfx->fillRect(x, 480, 20, 4, colorRed);
-      } else {
-        gfx->fillRect(x, 480, 20, 4, gfx->color565(0x8E, 0x8E, 0x93));
-      }
-    }
-  }
-}
-
 void show_clock_page() {
   currentPage = 0;
   gfx->fillRect(0, 60, LCD_WIDTH, LCD_HEIGHT - 60, BLACK);
   show_date();
   show_time();
-  show_page_indicator();
+  show_navigation_arrows();
 }
 
 #if SERVER_MONITOR_ENABLED
@@ -299,38 +382,37 @@ const char *check_server() {
     status = "NO NETWORK";
   }
 
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
+  disconnect_wifi();
 
   return status;
 }
 
 void draw_server_unit(int y, uint16_t ledColor) {
   int x = ((LCD_WIDTH - 160) / 2) & ~1;
-  gfx->fillRect(x, y, 160, 52, gfx->color565(0xD8, 0xD8, 0xDD));
+  gfx->fillRect(x, y, 160, 52, colorWhite);
   gfx->fillRect(x + 4, y + 4, 152, 44, BLACK);
   fill_even_circle(x + 24, y + 26, 6, ledColor);
-  gfx->fillRect(x + 44, y + 24, 96, 4, gfx->color565(0xD8, 0xD8, 0xDD));
+  gfx->fillRect(x + 44, y + 24, 96, 4, colorWhite);
 }
 
 void show_server_page() {
   currentPage = 1;
   int top = 158;
   gfx->fillRect(0, 60, LCD_WIDTH, LCD_HEIGHT - 60, BLACK);  //limpa
-  uint16_t ledColor = gfx->color565(0x60, 0x60, 0x66);
+  draw_arrow_right(374, 282, colorGrey);
+  uint16_t ledColor = colorGrey;
   draw_server_unit(top, ledColor);
   draw_server_unit(top + 68, ledColor);
-  gfx->setTextColor(gfx->color565(0xD8, 0xD8, 0xDD), BLACK);
+  gfx->setTextColor(colorWhite, BLACK);
   gfx->setTextSize(5);
   int nameWidth = strlen(SERVER_NAME) * 30;
   int nameX = ((LCD_WIDTH - nameWidth) / 2) & ~1;
   gfx->setCursor(nameX, top + 146);
   gfx->print(SERVER_NAME);
-  gfx->setTextColor(gfx->color565(0x60, 0x60, 0x66), BLACK);
+  gfx->setTextColor(colorGrey, BLACK);
   gfx->setTextSize(2);
   gfx->setCursor(90, top + 206);
   gfx->print("STATUS: CHECKING...");
-  show_page_indicator();
   const char *status = check_server();
   if (strcmp(status, "ONLINE") == 0) {  // as letras são iguais?
     ledColor = colorGreen;
@@ -395,8 +477,7 @@ void setup(void) {
     sync_time();
   }
 
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
+  disconnect_wifi();
 
   FT3168->IIC_Interrupt_Flag = false;  // abaixa a bandeirinha
 
@@ -447,8 +528,15 @@ void loop() {
   // Atualiza a hora e a data
   if ((millis() - lastMillis > 1000) && screenOn && currentPage == 0) {
     lastMillis = millis();
-    show_time();
-    int day = rtc.getDateTime().getDay();
+    RTC_DateTime datetime = rtc.getDateTime();
+
+    int minute = datetime.getMinute();
+    if (lastDisplayedMinute != minute) {
+      show_time();
+      lastDisplayedMinute = minute;
+    }
+
+    int day = datetime.getDay();
     if (lastDisplayedDay != day) {
       show_date();
       lastDisplayedDay = day;
@@ -468,15 +556,17 @@ void loop() {
   }
 
   // Cuida do deslize
+  // (xCourse > 100) = deslizou pra direita
+  // (xCourse < -100) = deslizou pra esquerda
   if ((isTouching) && ((millis() - lastWarningMillis) > 50)) {
     lastScreenRefresh = millis();  // reinicia o temporizador após qualquer toque
     int xCourse = xEnd - xStart;
 
-    if ((xCourse > 100) && (currentPage == 1) && screenOn) {  // (xCourse > 100) = deslizou pra direita
+    if ((xCourse < -100) && (currentPage == 1) && screenOn) {  //estou na página do servidor e deslizei pra esquerda = volto pro relógio
       show_clock_page();
     }
 #if SERVER_MONITOR_ENABLED
-    else if ((xCourse < -100) && (currentPage + 1 < PAGE_COUNT) && screenOn) {  //(xCourse < -100) = deslizou pra esquerda
+    else if ((xCourse > 100) && (currentPage + 1 < PAGE_COUNT) && screenOn) {  // estou na página do relógio e deslizei pra direita = vou pra página do servidor
       show_server_page();
     }
 #endif
@@ -492,8 +582,7 @@ void loop() {
         sync_time();
       }
 
-      WiFi.disconnect(true);
-      WiFi.mode(WIFI_OFF);
+      disconnect_wifi();
 
       lastSyncDay = datetime.getDay();
     }
